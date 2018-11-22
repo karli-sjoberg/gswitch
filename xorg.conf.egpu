@@ -1,0 +1,11 @@
+Section "Module"
+    Load "modesetting"
+EndSection
+
+Section "Device"
+    Identifier "Device0"
+    Driver "nvidia"
+    BusID "PCI:10:0:0"
+    Option "AllowEmptyInitialConfiguration"
+    Option "AllowExternalGpus" "True"
+EndSection
