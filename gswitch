@@ -1,0 +1,56 @@
+#!/bin/sh
+
+if [ $(whoami) != "root" ]; then
+ echo "You need to be root."
+ exit
+fi
+
+if [ "${1}" = "egpu" ]; then
+  if [ -h /etc/X11/xorg.conf ] && \
+     [ -f /etc/X11/xorg.conf.egpu ] && \
+     [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
+    echo -n "You are already set up. Would you like to reboot? (Y/n): "
+    read ANSWER
+    case ${ANSWER} in
+      Y|y|Yes|yes)
+        reboot
+      ;;
+      N|n|No|no)
+        exit 0
+      ;;
+      *)
+        echo "Unknown argument: ${ANSWER}."
+        exit 1
+      ;;
+    esac
+  else
+    ln -s /etc/X11/xorg.conf.egpu /etc/X11/xorg.conf
+    reboot
+  fi
+elif [ "${1}" = "internal" ]; then
+  if [ -h /etc/X11/xorg.conf ] && \
+     [ -f /etc/X11/xorg.conf.egpu ] && \
+     [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then 
+    rm -f /etc/X11/xorg.conf
+    reboot
+  else
+    echo -n "You are already set up. Would you like to reboot? (Y/n): "
+    read ANSWER
+    case ${ANSWER} in
+      Y|y|Yes|yes)
+        reboot
+      ;;
+      N|n|No|no)
+        exit 0
+      ;;
+      *)
+        echo "Unknown argument: ${ANSWER}."
+        exit 1
+      ;;
+    esac
+  fi
+else
+  echo "Unknown argument: ${1}."
+  echo "Valid arguments are \"egpu\" or \"internal\"."
+  exit 1
+fi
