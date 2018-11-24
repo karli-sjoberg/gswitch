@@ -9,11 +9,11 @@ if [ "${1}" = "egpu" ]; then
   if [ -h /etc/X11/xorg.conf ] && \
      [ -f /etc/X11/xorg.conf.egpu ] && \
      [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
-    echo -n "You are already set up. Would you like to reboot? (Y/n): "
+    echo -n "You are already set up. Would you like to reload? (Y/n): "
     read ANSWER
     case ${ANSWER} in
       Y|y|Yes|yes)
-        reboot
+        systemctl restart display-manager.service
       ;;
       N|n|No|no)
         exit 0
@@ -25,20 +25,20 @@ if [ "${1}" = "egpu" ]; then
     esac
   else
     ln -s /etc/X11/xorg.conf.egpu /etc/X11/xorg.conf
-    reboot
+    systemctl restart display-manager.service
   fi
 elif [ "${1}" = "internal" ]; then
   if [ -h /etc/X11/xorg.conf ] && \
      [ -f /etc/X11/xorg.conf.egpu ] && \
      [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then 
     rm -f /etc/X11/xorg.conf
-    reboot
+    systemctl restart display-manager.service
   else
-    echo -n "You are already set up. Would you like to reboot? (Y/n): "
+    echo -n "You are already set up. Would you like to reload? (Y/n): "
     read ANSWER
     case ${ANSWER} in
       Y|y|Yes|yes)
-        reboot
+        systemctl restart display-manager.service
       ;;
       N|n|No|no)
         exit 0
