@@ -1,56 +1,69 @@
 #!/bin/sh
 
-if [ $(whoami) != "root" ]; then
+if [ "$(whoami)" != "root" ]; then
  echo "You need to be root."
  exit
 fi
+
+ask_reload() {
+  QUESTION=$1
+  echo "${QUESTION}"
+  read ANSWER
+  case ${ANSWER} in
+    Y|y|Yes|yes)
+      RELOAD="true"
+    ;;
+    N|n|No|no)
+      RELOAD="false"
+    ;;
+    *)
+      echo "Unknown argument: ${ANSWER}."
+      exit 1
+    ;;
+  esac
+}
 
 if [ "${1}" = "egpu" ]; then
   if [ -h /etc/X11/xorg.conf ] && \
      [ -f /etc/X11/xorg.conf.egpu ] && \
      [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
-    echo -n "You are already set up. Would you like to reload? (Y/n): "
-    read ANSWER
-    case ${ANSWER} in
-      Y|y|Yes|yes)
-        systemctl restart display-manager.service
-      ;;
-      N|n|No|no)
-        exit 0
-      ;;
-      *)
-        echo "Unknown argument: ${ANSWER}."
-        exit 1
-      ;;
-    esac
+    ask_reload "You are already set up. Would you like to reload?"
+    if [ ${RELOAD} = "true" ]; then
+      systemctl restart display-manager.service
+    else
+      exit 0
+    fi
   else
     ln -s /etc/X11/xorg.conf.egpu /etc/X11/xorg.conf
-    systemctl restart display-manager.service
+    ask_reload "You are now set up. Would you like to reload?"
+    if [ ${RELOAD} = "true" ]; then
+      systemctl restart display-manager.service
+    else
+      exit 0
+    fi
   fi
 elif [ "${1}" = "internal" ]; then
   if [ -h /etc/X11/xorg.conf ] && \
      [ -f /etc/X11/xorg.conf.egpu ] && \
      [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then 
     rm -f /etc/X11/xorg.conf
-    systemctl restart display-manager.service
+    ask_reload "You are now set up. Would you like to reload?"
+    if [ ${RELOAD} = "true" ]; then
+      systemctl restart display-manager.service
+    else
+      exit 0
+    fi
   else
-    echo -n "You are already set up. Would you like to reload? (Y/n): "
-    read ANSWER
-    case ${ANSWER} in
-      Y|y|Yes|yes)
-        systemctl restart display-manager.service
-      ;;
-      N|n|No|no)
-        exit 0
-      ;;
-      *)
-        echo "Unknown argument: ${ANSWER}."
-        exit 1
-      ;;
-    esac
+    ask_reload "You are already set up. Would you like to reload?"
+    if [ ${RELOAD} = "true" ]; then
+      systemctl restart display-manager.service
+    else
+      exit 0
+    fi
   fi
 else
   echo "Unknown argument: ${1}."
   echo "Valid arguments are \"egpu\" or \"internal\"."
   exit 1
 fi
+
