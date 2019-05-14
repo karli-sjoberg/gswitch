@@ -1,0 +1,8 @@
+[Unit]
+Description=Automatic GPU switching service
+
+[Service]
+ExecStart=/usr/bin/gswitch boot
+
+[Install]
+WantedBy=multi-user.target

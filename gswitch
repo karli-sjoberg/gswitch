@@ -5,6 +5,10 @@ if [ "$(whoami)" != "root" ]; then
  exit
 fi
 
+EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
+EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' < ${EGPU_TEMPLATE})
+XORG_DRIVER=$(awk '/Driver/{gsub("\"","");print$2}' < ${EGPU_TEMPLATE})
+
 ask_reload() {
   QUESTION=$1
   echo "${QUESTION}"
@@ -23,47 +27,128 @@ ask_reload() {
   esac
 }
 
-if [ "${1}" = "egpu" ]; then
+do_reload() {
+  ( trap '' HUP TERM
+    while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
+      = "active" ]; do
+      sleep 1
+    done
+    if [ ${XORG_DRIVER} = "nvidia" ]; then
+      for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
+        modprobe -r ${DRIVER}
+      done
+      modprobe nvidia
+    fi
+    systemctl start display-manager.service ) &
+  systemctl stop display-manager.service
+  exit 0
+}
+
+switch_egpu() {
   if [ -h /etc/X11/xorg.conf ] && \
      [ -f /etc/X11/xorg.conf.egpu ] && \
      [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
-    ask_reload "You are already set up. Would you like to reload?"
+    ask_reload "You are already set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
-      systemctl restart display-manager.service
+      do_reload
     else
       exit 0
     fi
   else
     ln -s /etc/X11/xorg.conf.egpu /etc/X11/xorg.conf
-    ask_reload "You are now set up. Would you like to reload?"
+    ask_reload "You are now set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
-      systemctl restart display-manager.service
+      do_reload
     else
       exit 0
     fi
   fi
-elif [ "${1}" = "internal" ]; then
+}
+
+switch_internal() {
   if [ -h /etc/X11/xorg.conf ] && \
      [ -f /etc/X11/xorg.conf.egpu ] && \
-     [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then 
+     [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
     rm -f /etc/X11/xorg.conf
-    ask_reload "You are now set up. Would you like to reload?"
+    ask_reload "You are now set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
-      systemctl restart display-manager.service
+      do_reload
     else
       exit 0
     fi
   else
-    ask_reload "You are already set up. Would you like to reload?"
+    ask_reload "You are already set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
-      systemctl restart display-manager.service
+      do_reload
     else
       exit 0
     fi
   fi
-else
-  echo "Unknown argument: ${1}."
-  echo "Valid arguments are \"egpu\" or \"internal\"."
-  exit 1
-fi
+}
 
+case $1 in
+  egpu)
+    switch_egpu
+  ;;
+  internal)
+    switch_internal
+  ;;
+  boot)
+    MODE="internal"
+    for HEX_ID in $(lspci | grep -i 'vga' | cut -f 1 -d ' '); do
+      DEC_ID=""
+      for HEX_VALUE in $(echo ${HEX_ID} | tr ':|\.' ' '); do
+        HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
+        DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
+        DEC_ID="${DEC_ID}:${DEC_VALUE}"
+      done
+      DEC_ID=$(echo ${DEC_ID} | sed 's/^://')
+      if [ "${DEC_ID}" = "${EGPU_BUS_ID}" ]; then
+        MODE="egpu"
+	break
+      fi
+    done
+    case ${MODE} in
+      egpu)
+        yes | switch_egpu
+      ;;
+      internal)
+        yes | switch_internal
+      ;;
+    esac
+  ;;
+  setup)
+    lspci | awk '/vga|VGA/{print "BusID: "$0}'
+    echo "Which of these cards is your eGPU?"
+    echo "Please type in the BusID, e.g: 00:02.0"
+    read HEX_ID
+    VALID_HEX_ID=$(echo ${HEX_ID} | egrep -c '[a-z0-9]+:[a-z0-9]+\.[a-z0-9]')
+    if [ ${VALID_HEX_ID} -ne 1 ]; then
+      echo "You have typed in an unvalid BusID."
+      echo "Example of valid entry: 00:02.0"
+      exit 1
+    fi
+    for HEX_VALUE in $(echo ${HEX_ID} | tr ':|\.' ' '); do
+        HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
+        DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
+        DEC_ID="${DEC_ID}:${DEC_VALUE}"
+    done
+    DEC_ID=$(echo ${DEC_ID} | sed 's/^://')
+    sed -E -i "s/BusID.*$/BusID      \"PCI:${DEC_ID}\"/" /etc/X11/xorg.conf.egpu
+    if lspci | grep -i "${HEX_ID}" | grep -i 'nvidia'; then
+      DRIVER="nvidia"
+    elif lspci | grep -i "${HEX_ID}" | grep -i 'amd'; then
+      DRIVER="amdgpu"
+    elif lspci | grep -i "${HEX_ID}" | grep -i 'qxl'; then
+      DRIVER="qxl"
+    fi
+    sed -E -i "s/Driver.*$/Driver      \"${DRIVER}\"/" /etc/X11/xorg.conf.egpu
+    echo "Setup complete!"
+    exit 0
+  ;;
+  *)
+    echo "Unknown argument: ${1}."
+    echo "Valid arguments are \"egpu\", \"internal\" or \"boot\"."
+    exit 1
+  ;;
+esac
