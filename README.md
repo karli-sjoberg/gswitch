@@ -12,13 +12,15 @@ It comes with a boot service that automatically switches to your eGPU if it's co
 To activate this feature, you do:</br>
 sudo systemctl enable gswitch
 
-The process of getting this installed is:
-
+The process of getting this installed is:</br>
 git clone https://github.com/karli-sjoberg/gswitch.git</br>
+cd gswitch</br>
 sudo make install
 
 Uninstalling is just as easy:</br>
-sudo make uninstall
+sudo make uninstall</br>
+cd ..</br>
+rm -rf gswitch
 
 To get everything set up, you do:</br>
 sudo gswitch setup
