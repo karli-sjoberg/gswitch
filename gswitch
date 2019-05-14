@@ -87,6 +87,11 @@ switch_internal() {
 }
 
 case $1 in
+  -h|help)
+    echo "Valid arguments are \"egpu\", \"internal\", \"boot\" or \"setup\"."
+    echo "Example: sudo gswitch egpu"
+    exit 0
+  ;;
   egpu)
     switch_egpu
   ;;
@@ -133,14 +138,16 @@ case $1 in
         DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
         DEC_ID="${DEC_ID}:${DEC_VALUE}"
     done
-    DEC_ID=$(echo ${DEC_ID} | sed 's/^://')
-    sed -E -i "s/BusID.*$/BusID      \"PCI:${DEC_ID}\"/" /etc/X11/xorg.conf.egpu
-    if lspci | grep -i "${HEX_ID}" | grep -qi 'nvidia'; then
+    DEC_ID=$(echo ${DEC_ID} | sed 's/^:/PCI:/')
+    sed -E -i "s/BusID.*$/BusID      \"${DEC_ID}\"/" /etc/X11/xorg.conf.egpu
+    GPU_ID=$(lspci | grep -i "${HEX_ID}")
+    if echo "${GPU_ID}" | grep -qi 'nvidia'; then
       DRIVER="nvidia"
-    elif lspci | grep -i "${HEX_ID}" | grep -qi 'amd'; then
+    elif echo "${GPU_ID}" | grep -qi 'amd'; then
       DRIVER="amdgpu"
-    elif lspci | grep -i "${HEX_ID}" | grep -qi 'qxl'; then
-      DRIVER="qxl"
+    else
+      echo "Couldn't automatically find the proper driver for the GPU. Exiting."
+      exit 1
     fi
     sed -E -i "s/Driver.*$/Driver     \"${DRIVER}\"/" /etc/X11/xorg.conf.egpu
     echo "Setup complete!"
@@ -148,7 +155,8 @@ case $1 in
   ;;
   *)
     echo "Unknown argument: ${1}."
-    echo "Valid arguments are \"egpu\", \"internal\" or \"boot\"."
+    echo "Valid arguments are \"egpu\", \"internal\", \"boot\" or \"setup\"."
+    echo "Example: sudo gswitch egpu"
     exit 1
   ;;
 esac
