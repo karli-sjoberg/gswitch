@@ -142,7 +142,7 @@ case $1 in
     elif lspci | grep -i "${HEX_ID}" | grep -i 'qxl'; then
       DRIVER="qxl"
     fi
-    sed -E -i "s/Driver.*$/Driver      \"${DRIVER}\"/" /etc/X11/xorg.conf.egpu
+    sed -E -i "s/Driver.*$/Driver     \"${DRIVER}\"/" /etc/X11/xorg.conf.egpu
     echo "Setup complete!"
     exit 0
   ;;
