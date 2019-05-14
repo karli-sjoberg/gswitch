@@ -123,6 +123,7 @@ case $1 in
     esac
   ;;
   setup)
+    cp /usr/share/gswitch/xorg.conf.egpu /etc/X11/xorg.conf.egpu
     lspci | awk '/vga|VGA/{print "BusID: "$0}'
     echo "Which of these cards is your eGPU?"
     echo "Please type in the BusID, e.g: 00:02.0"
