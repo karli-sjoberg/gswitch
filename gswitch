@@ -28,6 +28,12 @@ ask_reload() {
 }
 
 do_reload() {
+  DEF_TARGET=$(systemctl get-default)
+  CUR_TARGET=$(systemctl list-units --type target | egrep "^eme|^res|^gra|^mul" | head -1 | awk '{print $1}')
+  if [ "${CUR_TARGET}" != "${DEF_TARGET}" ]; then
+     echo "Non-graphical/non-default mode: Switch not performed"
+     exit 0
+  fi
   ( trap '' HUP TERM
     while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
       = "active" ]; do
