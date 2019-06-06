@@ -5,4 +5,4 @@ Description=Automatic GPU switching service
 ExecStart=/usr/bin/gswitch boot
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
