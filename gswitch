@@ -9,6 +9,14 @@ EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
 EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' < ${EGPU_TEMPLATE})
 XORG_DRIVER=$(awk '/Driver/{gsub("\"","");print$2}' < ${EGPU_TEMPLATE})
 
+if [ -h /etc/X11/xorg.conf ] && \
+   [ -f /etc/X11/xorg.conf.egpu ] && \
+   [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
+  EGPU_SET="true"
+else
+  EGPU_SET="false"
+fi
+
 ask_reload() {
   QUESTION=$1
   echo "${QUESTION}"
@@ -45,9 +53,7 @@ do_reload() {
 }
 
 switch_egpu() {
-  if [ -h /etc/X11/xorg.conf ] && \
-     [ -f /etc/X11/xorg.conf.egpu ] && \
-     [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
+  if [ "${EGPU_SET}" = "true" ]; then
     ask_reload "You are already set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
       do_reload
@@ -66,9 +72,7 @@ switch_egpu() {
 }
 
 switch_internal() {
-  if [ -h /etc/X11/xorg.conf ] && \
-     [ -f /etc/X11/xorg.conf.egpu ] && \
-     [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
+  if [ "${EGPU_SET}" = "true" ]; then
     rm -f /etc/X11/xorg.conf
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
@@ -115,10 +119,18 @@ case $1 in
     done
     case ${MODE} in
       egpu)
-        yes | switch_egpu
+        if [ "${EGPU_SET}" = "true" ]; then
+          echo "no" | switch_egpu
+	else
+          echo "yes" | switch_egpu
+        fi
       ;;
       internal)
-        yes | switch_internal
+        if [ "${EGPU_SET}" = "true" ]; then
+          echo "yes" | switch_internal
+        else
+          echo "no" | switch_internal
+        fi
       ;;
     esac
   ;;
