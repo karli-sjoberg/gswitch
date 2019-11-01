@@ -67,8 +67,8 @@ switch_egpu() {
       fi
     done
     DISPLAY_ON="false"
-    for DISP in $(cat /sys/bus/pci/devices/0000:${HEX_ID}/drm/card[0-9]*/card[0-9]*-*/enabled); do
-      if [ ${DISP} = "enabled" ]; then
+    for DISP in $(cat /sys/bus/pci/devices/0000:${HEX_ID}/drm/card[0-9]*/card[0-9]*-*/status); do
+      if [ ${DISP} = "connected" ]; then
         DISPLAY_ON="true"
       fi
     done
