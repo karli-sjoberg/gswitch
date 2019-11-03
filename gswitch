@@ -69,9 +69,10 @@ switch_egpu() {
     DISP_PATH=/sys/bus/pci/devices/0000:${HEX_ID}/drm/card[0-9]*/card[0-9]*-*/status
     DISP_NUM=$(ls ${DISP_PATH} | grep -c status)
     if [ $(cat ${DISP_PATH} | grep -ce ^disconnected$) -eq $DISP_NUM ] && [ $DISP_NUM -gt 0 ]; then
-      echo "Warning: No eGPU attached display detected with open source drivers"
-      echo "Internal mode and setting DRI_PRIME variable are recommended for this configuration"
+      echo "Warning: No eGPU attached display detected with open source drivers."
+      echo "Internal mode and setting DRI_PRIME variable are recommended for this configuration."
       echo "Not setting eGPU mode."
+      switch_internal
       exit 0
     fi
   fi
