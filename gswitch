@@ -53,6 +53,29 @@ do_reload() {
 }
 
 switch_egpu() {
+  if [ ${XORG_DRIVER} != "nvidia" ]; then
+    for HEX_ID in $(lspci | grep -i 'vga' | cut -f 1 -d ' '); do
+      DEC_ID=""
+      for HEX_VALUE in $(echo ${HEX_ID} | tr ':|\.' ' '); do
+        HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
+        DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
+        DEC_ID="${DEC_ID}:${DEC_VALUE}"
+      done
+      DEC_ID=$(echo ${DEC_ID} | sed 's/^://')
+      if [ "${DEC_ID}" = "${EGPU_BUS_ID}" ]; then
+        break
+      fi
+    done
+    DISP_PATH=/sys/bus/pci/devices/0000:${HEX_ID}/drm/card[0-9]*/card[0-9]*-*/status
+    DISP_NUM=$(ls ${DISP_PATH} | grep -c status)
+    if [ $(cat ${DISP_PATH} | grep -ce ^disconnected$) -eq $DISP_NUM ] && [ $DISP_NUM -gt 0 ]; then
+      echo "Warning: No eGPU attached display detected with open source drivers."
+      echo "Internal mode and setting DRI_PRIME variable are recommended for this configuration."
+      echo "Not setting eGPU mode."
+      switch_internal
+      exit 0
+    fi
+  fi
   if [ "${EGPU_SET}" = "true" ]; then
     ask_reload "You are already set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
