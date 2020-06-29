@@ -36,20 +36,46 @@ ask_reload() {
 }
 
 do_reload() {
-  ( trap '' HUP TERM
-    while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
-      = "active" ]; do
-      sleep 1
-    done
-    if [ ${XORG_DRIVER} = "nvidia" ]; then
-      for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
-        modprobe -r ${DRIVER}
-      done
-      modprobe nvidia
+  if [ $F1 = "switch_internal" ]; then
+    BUS1D=$(echo $EGPU_BUS_ID | cut -f 1 -d :)
+    BUS2D=$(echo $EGPU_BUS_ID | cut -f 2 -d :)
+    BUS1H=$(printf "%02x" $BUS1D)
+    BUS2H=$(printf "%02x" $BUS2D)
+    HEX_DID=$(echo $BUS1H:$BUS2H.)
+    DEV_PATH=/sys/bus/pci/devices/[0-9a-f:]*${HEX_DID}[0-9]*/remove
+    if [ $(lspci -k | grep -A 3 ${HEX_DID} | grep -c "nvidia") -gt 0 ]; then
+      VGA_DRIVER=nvidia
+    elif [ $(lspci -k | grep -A 3 ${HEX_DID} | grep -c "amdgpu") -gt 0 ]; then
+      VGA_DRIVER=amdgpu
+    else
+      echo "Neither Nvidia or AMD GPU found at Bus ID specified in xorg.conf.egpu"
+      exit 1
     fi
-    systemctl start display-manager.service ) &
-  systemctl stop display-manager.service
-  exit 0
+    ( trap '' HUP TERM
+      while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
+        = "active" ]; do
+        sleep 1
+      done
+      if [ ${VGA_DRIVER} = "nvidia" ]; then
+        for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
+          modprobe -r ${DRIVER}
+        done
+      else
+        modprobe -r ${VGA_DRIVER}
+      fi
+      for PATH_D in ${DEV_PATH}; do
+        if [ -e $PATH_D ]; then
+          echo 1 > $PATH_D
+        fi
+      done
+      modprobe $VGA_DRIVER
+      systemctl start display-manager.service ) &
+    systemctl stop display-manager.service
+    exit 0
+  else
+    systemctl restart display-manager.service
+    exit 0
+  fi
 }
 
 switch_egpu() {
@@ -95,6 +121,7 @@ switch_egpu() {
 }
 
 switch_internal() {
+  F1="switch_internal"
   if [ "${EGPU_SET}" = "true" ]; then
     rm -f /etc/X11/xorg.conf
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
