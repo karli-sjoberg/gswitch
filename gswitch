@@ -8,6 +8,7 @@ fi
 EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
 EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' < ${EGPU_TEMPLATE})
 XORG_DRIVER=$(awk '/Driver/{gsub("\"","");print$2}' < ${EGPU_TEMPLATE})
+F1=$1
 
 if [ -h /etc/X11/xorg.conf ] && \
    [ -f /etc/X11/xorg.conf.egpu ] && \
@@ -36,7 +37,7 @@ ask_reload() {
 }
 
 do_reload() {
-  if [ $F1 = "switch_internal" ]; then
+  if [ $F1 = "internal" ]; then
     BUS1D=$(echo $EGPU_BUS_ID | cut -f 1 -d :)
     BUS2D=$(echo $EGPU_BUS_ID | cut -f 2 -d :)
     BUS1H=$(printf "%02x" $BUS1D)
@@ -121,7 +122,6 @@ switch_egpu() {
 }
 
 switch_internal() {
-  F1="switch_internal"
   if [ "${EGPU_SET}" = "true" ]; then
     rm -f /etc/X11/xorg.conf
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
