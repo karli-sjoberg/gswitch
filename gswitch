@@ -8,7 +8,6 @@ fi
 EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
 EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' < ${EGPU_TEMPLATE})
 XORG_DRIVER=$(awk '/Driver/{gsub("\"","");print$2}' < ${EGPU_TEMPLATE})
-F1=$1
 
 if [ -h /etc/X11/xorg.conf ] && \
    [ -f /etc/X11/xorg.conf.egpu ] && \
@@ -37,46 +36,29 @@ ask_reload() {
 }
 
 do_reload() {
-  if [ $F1 = "internal" ]; then
-    BUS1D=$(echo $EGPU_BUS_ID | cut -f 1 -d :)
-    BUS2D=$(echo $EGPU_BUS_ID | cut -f 2 -d :)
-    BUS1H=$(printf "%02x" $BUS1D)
-    BUS2H=$(printf "%02x" $BUS2D)
-    HEX_DID=$(echo $BUS1H:$BUS2H.)
-    DEV_PATH=/sys/bus/pci/devices/[0-9a-f:]*${HEX_DID}[0-9]*/remove
-    if [ $(lspci -k | grep -A 3 ${HEX_DID} | grep -c "nvidia") -gt 0 ]; then
-      VGA_DRIVER=nvidia
-    elif [ $(lspci -k | grep -A 3 ${HEX_DID} | grep -c "amdgpu") -gt 0 ]; then
-      VGA_DRIVER=amdgpu
-    else
-      echo "Neither Nvidia or AMD GPU found at Bus ID specified in xorg.conf.egpu"
-      exit 1
-    fi
-    ( trap '' HUP TERM
-      while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
-        = "active" ]; do
-        sleep 1
+ ( trap '' HUP TERM
+    while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
+      = "active" ]; do
+      sleep 1
+    done
+    if [ ${XORG_DRIVER} = "nvidia" ]; then
+      for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
+        modprobe -r ${DRIVER}
       done
-      if [ ${VGA_DRIVER} = "nvidia" ]; then
-        for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
-          modprobe -r ${DRIVER}
-        done
-      else
-        modprobe -r ${VGA_DRIVER}
-      fi
+    else
+      modprobe -r ${XORG_DRIVER}
+    fi
+    if [ ${REMOVE} = "true" ]; then
       for PATH_D in ${DEV_PATH}; do
         if [ -e $PATH_D ]; then
           echo 1 > $PATH_D
         fi
       done
-      modprobe $VGA_DRIVER
-      systemctl start display-manager.service ) &
-    systemctl stop display-manager.service
-    exit 0
-  else
-    systemctl restart display-manager.service
-    exit 0
-  fi
+    fi
+    modprobe $XORG_DRIVER
+    systemctl start display-manager.service ) &
+  systemctl stop display-manager.service
+  exit 0
 }
 
 switch_egpu() {
@@ -142,7 +124,7 @@ switch_internal() {
 
 case $1 in
   -h|help)
-    echo "Valid arguments are \"egpu\", \"internal\", \"boot\" or \"setup\"."
+    echo "Valid arguments are \"egpu\", \"internal\", \"boot\", \"remove\" or \"setup\"."
     echo "Example: sudo gswitch egpu"
     exit 0
   ;;
@@ -183,6 +165,29 @@ case $1 in
         fi
       ;;
     esac
+  ;;
+  remove)
+    BUS1D=$(echo $EGPU_BUS_ID | cut -f 1 -d :)
+    BUS2D=$(echo $EGPU_BUS_ID | cut -f 2 -d :)
+    BUS1H=$(printf "%02x" $BUS1D)
+    BUS2H=$(printf "%02x" $BUS2D)
+    HEX_DID=$(echo $BUS1H:$BUS2H.)
+    DEV_PATH=/sys/bus/pci/devices/[0-9a-f:]*${HEX_DID}[0-9]*/remove
+    echo "Try removing the GPU PCIe addresses? This will switch to internal and log you out. (Beta) (Y/n): "
+    read REMOVE_ANSWER
+    case ${REMOVE_ANSWER} in
+      Y|y|Yes|yes)
+        REMOVE="true"
+      ;;
+      N|n|No|no)
+        REMOVE="false"
+      ;;
+      *)
+        echo "Unknown argument: ${REMOVE_ANSWER}."
+        exit 1
+      ;;
+    esac
+  echo "yes" | switch_internal
   ;;
   setup)
     cp /usr/share/gswitch/xorg.conf.egpu /etc/X11/xorg.conf.egpu
