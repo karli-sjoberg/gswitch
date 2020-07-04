@@ -55,7 +55,9 @@ do_reload() {
         fi
       done
     fi
-    modprobe $XORG_DRIVER
+    if [ $(lspci -k | grep -c ${XORG_DRIVER}) -gt 0 ]; then
+      modprobe $XORG_DRIVER
+    fi
     systemctl start display-manager.service ) &
   systemctl stop display-manager.service
   exit 0
