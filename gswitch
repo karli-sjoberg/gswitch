@@ -36,7 +36,7 @@ ask_reload() {
 }
 
 do_reload() {
- ( trap '' HUP TERM
+  ( trap '' HUP TERM
     while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
       = "active" ]; do
       sleep 1
@@ -223,7 +223,7 @@ case $1 in
   ;;
   *)
     echo "Unknown argument: ${1}."
-    echo "Valid arguments are \"egpu\", \"internal\", \"boot\" or \"setup\"."
+    echo "Valid arguments are \"egpu\", \"internal\", \"boot\", \"remove\" or \"setup\"."
     echo "Example: sudo gswitch egpu"
     exit 1
   ;;
