@@ -42,10 +42,21 @@ do_reload() {
       sleep 1
     done
     if [ ${XORG_DRIVER} = "nvidia" ]; then
+      systemctl stop nvidia-persistenced.service
+      if [ $(lsmod | grep "nvidia_uvm " | awk '{print $3}') -gt 0 ] || [ $(lsmod | grep "nvidia_drm " | awk '{print $3}') -gt 0 ]; then
+        systemctl start display-manager.service
+        echo "Driver still in use. Check for applications like Folding@Home running in the background. Stopping removal."
+        exit 0
+      fi
       for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
         modprobe -r ${DRIVER}
       done
     else
+      if [ $(lsmod | grep "${XORG_DRIVER} " | awk '{print $3}') -gt 0 ]; then
+        systemctl start display-manager.service
+        echo "Driver still in use. Check for applications like Folding@Home running in the background. Stopping removal."
+        exit 0
+      fi
       modprobe -r ${XORG_DRIVER}
     fi
     if [ ${REMOVE} = "true" ]; then
@@ -57,6 +68,9 @@ do_reload() {
     fi
     if [ $(lspci -k | grep -c ${XORG_DRIVER}) -gt 0 ]; then
       modprobe $XORG_DRIVER
+      if [ ${XORG_DRIVER} = "nvidia" ]; then
+        modprobe nvidia_drm
+      fi
     fi
     systemctl start display-manager.service ) &
   systemctl stop display-manager.service
