@@ -42,10 +42,35 @@ do_reload() {
       sleep 1
     done
     if [ ${XORG_DRIVER} = "nvidia" ]; then
+      systemctl stop nvidia-persistenced.service
+      if [ $(lsmod | grep "nvidia_uvm " | awk '{print $3}') -gt 0 ] || [ $(lsmod | grep "nvidia_drm " | awk '{print $3}') -gt 0 ]; then
+        systemctl start display-manager.service
+        echo "Driver still in use. Check for applications like Folding@Home running in the background. Stopping removal."
+        exit 0
+      fi
       for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
         modprobe -r ${DRIVER}
       done
-      modprobe nvidia
+    else
+      if [ $(lsmod | grep "${XORG_DRIVER} " | awk '{print $3}') -gt 0 ]; then
+        systemctl start display-manager.service
+        echo "Driver still in use. Check for applications like Folding@Home running in the background. Stopping removal."
+        exit 0
+      fi
+      modprobe -r ${XORG_DRIVER}
+    fi
+    if [ ${REMOVE} = "true" ]; then
+      for PATH_D in ${DEV_PATH}; do
+        if [ -e $PATH_D ]; then
+          echo 1 > $PATH_D
+        fi
+      done
+    fi
+    if [ $(lspci -k | grep -c ${XORG_DRIVER}) -gt 0 ]; then
+      modprobe $XORG_DRIVER
+      if [ ${XORG_DRIVER} = "nvidia" ]; then
+        modprobe nvidia_drm
+      fi
     fi
     systemctl start display-manager.service ) &
   systemctl stop display-manager.service
@@ -115,7 +140,7 @@ switch_internal() {
 
 case $1 in
   -h|help)
-    echo "Valid arguments are \"egpu\", \"internal\", \"boot\" or \"setup\"."
+    echo "Valid arguments are \"egpu\", \"internal\", \"boot\", \"remove\" or \"setup\"."
     echo "Example: sudo gswitch egpu"
     exit 0
   ;;
@@ -157,6 +182,29 @@ case $1 in
       ;;
     esac
   ;;
+  remove)
+    BUS1D=$(echo $EGPU_BUS_ID | cut -f 1 -d :)
+    BUS2D=$(echo $EGPU_BUS_ID | cut -f 2 -d :)
+    BUS1H=$(printf "%02x" $BUS1D)
+    BUS2H=$(printf "%02x" $BUS2D)
+    HEX_DID=$(echo $BUS1H:$BUS2H.)
+    DEV_PATH=/sys/bus/pci/devices/[0-9a-f:]*${HEX_DID}[0-9]*/remove
+    echo "Try removing the GPU PCIe addresses? This will switch to internal and log you out. (Beta) (Y/n): "
+    read REMOVE_ANSWER
+    case ${REMOVE_ANSWER} in
+      Y|y|Yes|yes)
+        REMOVE="true"
+      ;;
+      N|n|No|no)
+        REMOVE="false"
+      ;;
+      *)
+        echo "Unknown argument: ${REMOVE_ANSWER}."
+        exit 1
+      ;;
+    esac
+  echo "yes" | switch_internal
+  ;;
   setup)
     cp /usr/share/gswitch/xorg.conf.egpu /etc/X11/xorg.conf.egpu
     lspci | awk '/vga|VGA/{print "BusID: "$0}'
@@ -191,7 +239,7 @@ case $1 in
   ;;
   *)
     echo "Unknown argument: ${1}."
-    echo "Valid arguments are \"egpu\", \"internal\", \"boot\" or \"setup\"."
+    echo "Valid arguments are \"egpu\", \"internal\", \"boot\", \"remove\" or \"setup\"."
     echo "Example: sudo gswitch egpu"
     exit 1
   ;;
