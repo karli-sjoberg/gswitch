@@ -6,12 +6,18 @@ if [ "$(whoami)" != "root" ]; then
 fi
 
 EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
-EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' < ${EGPU_TEMPLATE})
-XORG_DRIVER=$(awk '/Driver/{gsub("\"","");print$2}' < ${EGPU_TEMPLATE})
+EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' < ${EGPU_TEMPLATE} 2>/dev/null)
+XORG_DRIVER=$(awk '/Driver/{gsub("\"","");print$2}' < ${EGPU_TEMPLATE} 2>/dev/null)
 
-if [ -h /etc/X11/xorg.conf ] && \
+if lsb_release -a | grep -qi 'suse'; then
+  XORG_CONFIG="/etc/X11/xorg.conf.d/99-gswitch-egpu.conf"
+else
+  XORG_CONFIG="/etc/X11/xorg.conf"
+fi
+
+if [ -h ${XORG_CONFIG} ] && \
    [ -f /etc/X11/xorg.conf.egpu ] && \
-   [ "$(readlink /etc/X11/xorg.conf)" = "/etc/X11/xorg.conf.egpu" ]; then
+   [ "$(readlink ${XORG_CONFIG})" = "/etc/X11/xorg.conf.egpu" ]; then
   EGPU_SET="true"
 else
   EGPU_SET="false"
@@ -41,33 +47,15 @@ do_reload() {
       = "active" ]; do
       sleep 1
     done
-    if [ ${XORG_DRIVER} = "nvidia" ]; then
-      systemctl stop nvidia-persistenced.service
-      if [ $(lsmod | grep "nvidia_uvm " | awk '{print $3}') -gt 0 ] || [ $(lsmod | grep "nvidia_drm " | awk '{print $3}') -gt 0 ]; then
-        systemctl start display-manager.service
-        echo "Driver still in use. Check for applications like Folding@Home running in the background. Stopping removal."
-        exit 0
-      fi
-      for DRIVER in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
-        modprobe -r ${DRIVER}
-      done
-    else
-      if [ $(lsmod | grep "${XORG_DRIVER} " | awk '{print $3}') -gt 0 ]; then
-        systemctl start display-manager.service
-        echo "Driver still in use. Check for applications like Folding@Home running in the background. Stopping removal."
-        exit 0
-      fi
-      modprobe -r ${XORG_DRIVER}
-    fi
     if [ ${REMOVE} = "true" ]; then
       for PATH_D in ${DEV_PATH}; do
-        if [ -e $PATH_D ]; then
-          echo 1 > $PATH_D
+        if [ -e ${PATH_D} ]; then
+          echo 1 > ${PATH_D}
         fi
       done
     fi
     if [ $(lspci -k | grep -c ${XORG_DRIVER}) -gt 0 ]; then
-      modprobe $XORG_DRIVER
+      modprobe ${XORG_DRIVER}
       if [ ${XORG_DRIVER} = "nvidia" ]; then
         modprobe nvidia_drm
       fi
@@ -93,7 +81,7 @@ switch_egpu() {
     done
     DISP_PATH=/sys/bus/pci/devices/0000:${HEX_ID}/drm/card[0-9]*/card[0-9]*-*/status
     DISP_NUM=$(ls ${DISP_PATH} | grep -c status)
-    if [ $(cat ${DISP_PATH} | grep -ce ^disconnected$) -eq $DISP_NUM ] && [ $DISP_NUM -gt 0 ]; then
+    if [ $(cat ${DISP_PATH} | grep -ce ^disconnected$) -eq ${DISP_NUM} ] && [ ${DISP_NUM} -gt 0 ]; then
       echo "Warning: No eGPU attached display detected with open source drivers."
       echo "Internal mode and setting DRI_PRIME variable are recommended for this configuration."
       echo "Not setting eGPU mode."
@@ -109,7 +97,7 @@ switch_egpu() {
       exit 0
     fi
   else
-    ln -s /etc/X11/xorg.conf.egpu /etc/X11/xorg.conf
+    ln -s /etc/X11/xorg.conf.egpu ${XORG_CONFIG}
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
       do_reload
@@ -121,7 +109,7 @@ switch_egpu() {
 
 switch_internal() {
   if [ "${EGPU_SET}" = "true" ]; then
-    rm -f /etc/X11/xorg.conf
+    rm -f ${XORG_CONFIG}
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
     if [ ${RELOAD} = "true" ]; then
       do_reload
@@ -162,14 +150,14 @@ case $1 in
       DEC_ID=$(echo ${DEC_ID} | sed 's/^://')
       if [ "${DEC_ID}" = "${EGPU_BUS_ID}" ]; then
         MODE="egpu"
-	break
+        break
       fi
     done
     case ${MODE} in
       egpu)
         if [ "${EGPU_SET}" = "true" ]; then
           echo "no" | switch_egpu
-	else
+        else
           echo "yes" | switch_egpu
         fi
       ;;
@@ -183,11 +171,11 @@ case $1 in
     esac
   ;;
   remove)
-    BUS1D=$(echo $EGPU_BUS_ID | cut -f 1 -d :)
-    BUS2D=$(echo $EGPU_BUS_ID | cut -f 2 -d :)
-    BUS1H=$(printf "%02x" $BUS1D)
-    BUS2H=$(printf "%02x" $BUS2D)
-    HEX_DID=$(echo $BUS1H:$BUS2H.)
+    BUS1D=$(echo ${EGPU_BUS_ID} | cut -f 1 -d :)
+    BUS2D=$(echo ${EGPU_BUS_ID} | cut -f 2 -d :)
+    BUS1H=$(printf "%02x" ${BUS1D})
+    BUS2H=$(printf "%02x" ${BUS2D})
+    HEX_DID=$(echo ${BUS1H}:${BUS2H}.)
     DEV_PATH=/sys/bus/pci/devices/[0-9a-f:]*${HEX_DID}[0-9]*/remove
     echo "Try removing the GPU PCIe addresses? This will switch to internal and log you out. (Beta) (Y/n): "
     read REMOVE_ANSWER
@@ -218,9 +206,9 @@ case $1 in
       exit 1
     fi
     for HEX_VALUE in $(echo ${HEX_ID} | tr ':|\.' ' '); do
-        HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
-        DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
-        DEC_ID="${DEC_ID}:${DEC_VALUE}"
+      HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
+      DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
+      DEC_ID="${DEC_ID}:${DEC_VALUE}"
     done
     DEC_ID=$(echo ${DEC_ID} | sed 's/^:/PCI:/')
     sed -E -i "s/BusID.*$/BusID      \"${DEC_ID}\"/" /etc/X11/xorg.conf.egpu
