@@ -6,8 +6,14 @@ if [ "$(whoami)" != "root" ]; then
 fi
 
 EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
-EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' < ${EGPU_TEMPLATE} 2>/dev/null)
-XORG_DRIVER=$(awk '/Driver/{gsub("\"","");print$2}' < ${EGPU_TEMPLATE} 2>/dev/null)
+EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' \
+              < ${EGPU_TEMPLATE} 2>/dev/null)
+XORG_DRIVER=$(awk '/Driver/{gsub("\"","");if($1 != "#")print$2}' \
+              < ${EGPU_TEMPLATE} 2>/dev/null)
+if [ "$(echo ${XORG_DRIVER} | wc -w)" -gt "1" ]; then
+  echo "More than one driver specified in the template. Exiting."
+  exit 1
+fi
 
 if lsb_release -a | grep -qi 'suse'; then
   XORG_CONFIG="/etc/X11/xorg.conf.d/99-gswitch-egpu.conf"
