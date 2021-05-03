@@ -7,10 +7,10 @@ fi
 
 EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
 EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' \
-              < ${EGPU_TEMPLATE} 2>/dev/null)
+              < "${EGPU_TEMPLATE}" 2>/dev/null)
 XORG_DRIVER=$(awk '/Driver/{gsub("\"","");if($1 != "#")print$2}' \
-              < ${EGPU_TEMPLATE} 2>/dev/null)
-if [ "$(echo ${XORG_DRIVER} | wc -w)" -gt "1" ]; then
+              < "${EGPU_TEMPLATE}" 2>/dev/null)
+if [ "$(echo "${XORG_DRIVER}" | wc -w)" -gt "1" ]; then
   echo "More than one driver specified in the template. Exiting."
   exit 1
 fi
@@ -21,9 +21,9 @@ else
   XORG_CONFIG="/etc/X11/xorg.conf"
 fi
 
-if [ -h ${XORG_CONFIG} ] && \
-   [ -f /etc/X11/xorg.conf.egpu ] && \
-   [ "$(readlink ${XORG_CONFIG})" = "/etc/X11/xorg.conf.egpu" ]; then
+if [ -h "${XORG_CONFIG}" ] && \
+   [ -f "${EGPU_TEMPLATE}" ] && \
+   [ "$(readlink "${XORG_CONFIG}")" = "${EGPU_TEMPLATE}" ]; then
   EGPU_SET="true"
 else
   EGPU_SET="false"
@@ -32,8 +32,8 @@ fi
 ask_reload() {
   QUESTION=$1
   echo "${QUESTION}"
-  read ANSWER
-  case ${ANSWER} in
+  read -r ANSWER
+  case "${ANSWER}" in
     Y|y|Yes|yes)
       RELOAD="true"
     ;;
@@ -53,16 +53,16 @@ do_reload() {
       = "active" ]; do
       sleep 1
     done
-    if [ ${REMOVE} = "true" ]; then
+    if [ "${REMOVE}" = "true" ]; then
       for PATH_D in ${DEV_PATH}; do
-        if [ -e ${PATH_D} ]; then
-          echo 1 > ${PATH_D}
+        if [ -e "${PATH_D}" ]; then
+          echo 1 > "${PATH_D}"
         fi
       done
     fi
-    if [ $(lspci -k | grep -c ${XORG_DRIVER}) -gt 0 ]; then
-      modprobe ${XORG_DRIVER}
-      if [ ${XORG_DRIVER} = "nvidia" ]; then
+    if [ "$(lspci -k | grep -c "${XORG_DRIVER}")" -gt 0 ]; then
+      modprobe "${XORG_DRIVER}"
+      if [ "${XORG_DRIVER}" = "nvidia" ]; then
         modprobe nvidia_drm
       fi
     fi
@@ -72,22 +72,27 @@ do_reload() {
 }
 
 switch_egpu() {
-  if [ ${XORG_DRIVER} != "nvidia" ]; then
+  if [ "${XORG_DRIVER}" != "nvidia" ]; then
     for HEX_ID in $(lspci | grep -i 'vga' | cut -f 1 -d ' '); do
       DEC_ID=""
-      for HEX_VALUE in $(echo ${HEX_ID} | tr ':|\.' ' '); do
-        HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
+      for HEX_VALUE in $(echo "${HEX_ID}" | tr ':|\.' ' '); do
+        HEX_VALUE_UPPER=$(echo "${HEX_VALUE}" | tr '[:lower:]' '[:upper:]')
         DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
         DEC_ID="${DEC_ID}:${DEC_VALUE}"
       done
-      DEC_ID=$(echo ${DEC_ID} | sed 's/^://')
+      DEC_ID=$(echo "${DEC_ID}" | sed 's/^://')
       if [ "${DEC_ID}" = "${EGPU_BUS_ID}" ]; then
         break
       fi
     done
-    DISP_PATH=/sys/bus/pci/devices/0000:${HEX_ID}/drm/card[0-9]*/card[0-9]*-*/status
-    DISP_NUM=$(ls ${DISP_PATH} | grep -c status)
-    if [ $(cat ${DISP_PATH} | grep -ce ^disconnected$) -eq ${DISP_NUM} ] && [ ${DISP_NUM} -gt 0 ]; then
+    DISP_PATH="/sys/bus/pci/devices/0000:${HEX_ID}/drm/card*/card*"
+    DISP_STATUS=$(for DISP in ${DISP_PATH}; do find "${DISP}" -type f -name \
+                  'status'; done)
+    DISP_DISCON_NUM=$(printf '%s' "${DISP_STATUS}" | xargs \
+                      grep -e '^disconnected$' | wc -l)
+    DISP_TOTAL_NUM=$(printf '%s' "${DISP_STATUS}" | wc -l)
+    if [ "${DISP_DISCON_NUM}" -eq "${DISP_TOTAL_NUM}" ] && \
+       [ "${DISP_TOTAL_NUM}" -gt "0" ]; then
       echo "Warning: No eGPU attached display detected with open source drivers."
       echo "Internal mode and setting DRI_PRIME variable are recommended for this configuration."
       echo "Not setting eGPU mode."
@@ -97,15 +102,15 @@ switch_egpu() {
   fi
   if [ "${EGPU_SET}" = "true" ]; then
     ask_reload "You are already set up. Would you like to reload? (Y/n)"
-    if [ ${RELOAD} = "true" ]; then
+    if [ "${RELOAD}" = "true" ]; then
       do_reload
     else
       exit 0
     fi
   else
-    ln -s /etc/X11/xorg.conf.egpu ${XORG_CONFIG}
+    ln -s "${EGPU_TEMPLATE}" "${XORG_CONFIG}"
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
-    if [ ${RELOAD} = "true" ]; then
+    if [ "${RELOAD}" = "true" ]; then
       do_reload
     else
       exit 0
@@ -115,16 +120,16 @@ switch_egpu() {
 
 switch_internal() {
   if [ "${EGPU_SET}" = "true" ]; then
-    rm -f ${XORG_CONFIG}
+    rm -f "${XORG_CONFIG}"
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
-    if [ ${RELOAD} = "true" ]; then
+    if [ "${RELOAD}" = "true" ]; then
       do_reload
     else
       exit 0
     fi
   else
     ask_reload "You are already set up. Would you like to reload? (Y/n)"
-    if [ ${RELOAD} = "true" ]; then
+    if [ "${RELOAD}" = "true" ]; then
       do_reload
     else
       exit 0
@@ -148,12 +153,12 @@ case $1 in
     MODE="internal"
     for HEX_ID in $(lspci | grep -i 'vga' | cut -f 1 -d ' '); do
       DEC_ID=""
-      for HEX_VALUE in $(echo ${HEX_ID} | tr ':|\.' ' '); do
-        HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
+      for HEX_VALUE in $(echo "${HEX_ID}" | tr ':|\.' ' '); do
+        HEX_VALUE_UPPER=$(echo "${HEX_VALUE}" | tr '[:lower:]' '[:upper:]')
         DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
         DEC_ID="${DEC_ID}:${DEC_VALUE}"
       done
-      DEC_ID=$(echo ${DEC_ID} | sed 's/^://')
+      DEC_ID=$(echo "${DEC_ID}" | sed 's/^://')
       if [ "${DEC_ID}" = "${EGPU_BUS_ID}" ]; then
         MODE="egpu"
         break
@@ -177,15 +182,15 @@ case $1 in
     esac
   ;;
   remove)
-    BUS1D=$(echo ${EGPU_BUS_ID} | cut -f 1 -d :)
-    BUS2D=$(echo ${EGPU_BUS_ID} | cut -f 2 -d :)
-    BUS1H=$(printf "%02x" ${BUS1D})
-    BUS2H=$(printf "%02x" ${BUS2D})
-    HEX_DID=$(echo ${BUS1H}:${BUS2H}.)
-    DEV_PATH=/sys/bus/pci/devices/[0-9a-f:]*${HEX_DID}[0-9]*/remove
+    BUS1D=$(echo "${EGPU_BUS_ID}" | cut -f 1 -d :)
+    BUS2D=$(echo "${EGPU_BUS_ID}" | cut -f 2 -d :)
+    BUS1H=$(printf "%02x" "${BUS1D}")
+    BUS2H=$(printf "%02x" "${BUS2D}")
+    HEX_DID="${BUS1H}:${BUS2H}."
+    DEV_PATH="/sys/bus/pci/devices/[0-9a-f:]*${HEX_DID}[0-9]*/remove"
     echo "Try removing the GPU PCIe addresses? This will switch to internal and log you out. (Beta) (Y/n): "
-    read REMOVE_ANSWER
-    case ${REMOVE_ANSWER} in
+    read -r REMOVE_ANSWER
+    case "${REMOVE_ANSWER}" in
       Y|y|Yes|yes)
         REMOVE="true"
       ;;
@@ -200,24 +205,24 @@ case $1 in
   echo "yes" | switch_internal
   ;;
   setup)
-    cp /usr/share/gswitch/xorg.conf.egpu /etc/X11/xorg.conf.egpu
+    cp /usr/share/gswitch/xorg.conf.egpu "${EGPU_TEMPLATE}"
     lspci | awk '/vga|VGA/{print "BusID: "$0}'
     echo "Which of these cards is your eGPU?"
     echo "Please type in the BusID, e.g: 00:02.0"
-    read HEX_ID
-    VALID_HEX_ID=$(echo ${HEX_ID} | egrep -c '^[a-z0-9]+:[a-z0-9]+\.[a-z0-9]$')
-    if [ ${VALID_HEX_ID} -ne 1 ]; then
+    read -r HEX_ID
+    VALID_HEX_ID=$(echo "${HEX_ID}" | grep -Ec '^[a-z0-9]+:[a-z0-9]+\.[a-z0-9]$')
+    if [ "${VALID_HEX_ID}" -ne 1 ]; then
       echo "You have typed in an unvalid BusID."
       echo "Example of valid entry: 00:02.0"
       exit 1
     fi
-    for HEX_VALUE in $(echo ${HEX_ID} | tr ':|\.' ' '); do
-      HEX_VALUE_UPPER=$(echo ${HEX_VALUE} | tr '[a-z]' '[A-Z]')
+    for HEX_VALUE in $(echo "${HEX_ID}" | tr ':|\.' ' '); do
+      HEX_VALUE_UPPER=$(echo "${HEX_VALUE}" | tr '[:lower:]' '[:upper:]')
       DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
       DEC_ID="${DEC_ID}:${DEC_VALUE}"
     done
-    DEC_ID=$(echo ${DEC_ID} | sed 's/^:/PCI:/')
-    sed -E -i "s/BusID.*$/BusID      \"${DEC_ID}\"/" /etc/X11/xorg.conf.egpu
+    DEC_ID=$(echo "${DEC_ID}" | sed 's/^:/PCI:/')
+    sed -E -i "s/BusID.*$/BusID      \"${DEC_ID}\"/" "${EGPU_TEMPLATE}"
     GPU_ID=$(lspci | grep -i "${HEX_ID}")
     if echo "${GPU_ID}" | grep -qi 'nvidia'; then
       DRIVER="nvidia"
@@ -227,7 +232,7 @@ case $1 in
       echo "Couldn't automatically find the proper driver for the GPU. Exiting."
       exit 1
     fi
-    sed -E -i "s/Driver.*$/Driver     \"${DRIVER}\"/" /etc/X11/xorg.conf.egpu
+    sed -E -i "s/Driver.*$/Driver     \"${DRIVER}\"/" "${EGPU_TEMPLATE}"
     echo "Setup complete!"
     exit 0
   ;;
