@@ -5,20 +5,46 @@ if [ "$(whoami)" != "root" ]; then
  exit
 fi
 
-EGPU_TEMPLATE="/etc/X11/xorg.conf.egpu"
-EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' \
-              < "${EGPU_TEMPLATE}" 2>/dev/null)
-XORG_DRIVER=$(awk '/Driver/{gsub("\"","");if($1 != "#")print$2}' \
-              < "${EGPU_TEMPLATE}" 2>/dev/null)
+OS=$(lsb_release -a 2>/dev/null | awk '/Distributor ID:/{print tolower($NF)}')
+
+case "${OS}" in
+  opensuse)
+    XORG_CONF_DIR="/etc/X11/xorg.conf.d"
+    if [ ! -d "${XORG_CONF_DIR}" ]; then
+      mkdir -p "${XORG_CONF_DIR}"
+    fi
+    EGPU_TEMPLATE="${XORG_CONF_DIR}/xorg.conf.egpu"
+    XORG_CONFIG="${XORG_CONF_DIR}/99-gswitch-egpu.conf"
+  ;;
+  ubuntu)
+    XORG_CONF_DIR="/etc/X11"
+    if [ ! -d "${XORG_CONF_DIR}" ]; then
+      mkdir -p "${XORG_CONF_DIR}"
+    fi
+    EGPU_TEMPLATE="${XORG_CONF_DIR}/xorg.conf.egpu"
+    XORG_CONFIG="${XORG_CONF_DIR}/xorg.conf"
+  ;;
+  *)
+    # Untested OS distribution
+    # Hoping the path works the all the same
+    XORG_CONF_DIR="/etc/X11/xorg.conf.d"
+    if [ ! -d "${XORG_CONF_DIR}" ]; then
+      mkdir -p "${XORG_CONF_DIR}"
+    fi
+    EGPU_TEMPLATE="${XORG_CONF_DIR}/xorg.conf.egpu"
+    XORG_CONFIG="${XORG_CONF_DIR}/99-gswitch-egpu.conf"
+  ;;
+esac
+
+if [ -f "${EGPU_TEMPLATE}" ]; then
+  EGPU_BUS_ID=$(awk '/BusID/{gsub(/(PCI:|\")/," ");print$2}' \
+                < "${EGPU_TEMPLATE}" 2>/dev/null)
+  XORG_DRIVER=$(awk '/Driver/{gsub("\"","");if($1 != "#")print$2}' \
+                < "${EGPU_TEMPLATE}" 2>/dev/null)
+fi
 if [ "$(echo "${XORG_DRIVER}" | wc -w)" -gt "1" ]; then
   echo "More than one driver specified in the template. Exiting."
   exit 1
-fi
-
-if lsb_release -a | grep -qi 'suse'; then
-  XORG_CONFIG="/etc/X11/xorg.conf.d/99-gswitch-egpu.conf"
-else
-  XORG_CONFIG="/etc/X11/xorg.conf"
 fi
 
 if [ -h "${XORG_CONFIG}" ] && \
@@ -50,7 +76,7 @@ ask_reload() {
 do_reload() {
   ( trap '' HUP TERM
     while [ "$(systemctl status display-manager | awk '/Active:/{print$2}')" \
-      = "active" ]; do
+               = "active" ]; do
       sleep 1
     done
     if [ "${REMOVE}" = "true" ]; then
@@ -72,6 +98,11 @@ do_reload() {
 }
 
 switch_egpu() {
+  if [ ! -f "${EGPU_TEMPLATE}" ]; then
+    echo "No eGPU template detected, please run setup before use:"
+    echo "# gswitch setup"
+    exit 1
+  fi
   if [ "${XORG_DRIVER}" != "nvidia" ]; then
     for HEX_ID in $(lspci | grep -i 'vga' | cut -f 1 -d ' '); do
       DEC_ID=""
@@ -119,6 +150,11 @@ switch_egpu() {
 }
 
 switch_internal() {
+  if [ ! -f "${EGPU_TEMPLATE}" ]; then
+    echo "No eGPU template detected, please run setup before use:"
+    echo "# gswitch setup"
+    exit 1
+  fi
   if [ "${EGPU_SET}" = "true" ]; then
     rm -f "${XORG_CONFIG}"
     ask_reload "You are now set up. Would you like to reload? (Y/n)"
