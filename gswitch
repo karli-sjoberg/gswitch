@@ -119,9 +119,9 @@ switch_egpu() {
     DISP_PATH="/sys/bus/pci/devices/0000:${HEX_ID}/drm/card*/card*"
     DISP_STATUS=$(for DISP in ${DISP_PATH}; do find "${DISP}" -type f -name \
                   'status'; done)
-    DISP_DISCON_NUM=$(printf '%s' "${DISP_STATUS}" | xargs \
+    DISP_DISCON_NUM=$(printf '%s\n' "${DISP_STATUS}" | xargs \
                       grep -e '^disconnected$' | wc -l)
-    DISP_TOTAL_NUM=$(printf '%s' "${DISP_STATUS}" | wc -l)
+    DISP_TOTAL_NUM=$(printf '%s\n' "${DISP_STATUS}" | wc -l)
     if [ "${DISP_DISCON_NUM}" -eq "${DISP_TOTAL_NUM}" ] && \
        [ "${DISP_TOTAL_NUM}" -gt "0" ]; then
       echo "Warning: No eGPU attached display detected with open source drivers."
