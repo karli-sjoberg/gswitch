@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 if [ "$(whoami)" != "root" ]; then
  echo "You need to be root."
@@ -242,19 +242,55 @@ case $1 in
   ;;
   setup)
     cp /usr/share/gswitch/xorg.conf.egpu "${EGPU_TEMPLATE}"
-    lspci | awk '/vga|VGA/{print "BusID: "$0}'
+    # List all gpus and store them in variable
+    IFS=$'\n'    # We want to divide array by end of line, not whitespaces
+    LSPCI=($(lspci | awk '/vga|VGA/{printf "%s\n", $0}'))
+    # Store BusID in array
+    LSPCI_HEX_IDS=""
+    I=0 # Help number to count iterrations
+    # Print head text
     echo "Which of these cards is your eGPU?"
-    echo "Please type in the BusID, e.g: 00:02.0"
+    for d in "${LSPCI[@]}"
+    do
+      # Print BusID with position in array and informations about gpu
+      echo "Nr: ${I} BusID: ${d}"
+      # Parse and store BusID
+      BUS_ID=($(echo ${d} | awk '{printf "%s\n", $1}'))
+      LSPCI_HEX_IDS=(${LSPCI_HEX_IDS[@]} ${BUS_ID[@]})
+      I=$((I+1))  # Increment number for next itteration
+    done
+    # Wait for user input
+    echo "Please type in the BusID, e.g: 00:02.0 or line number"
     read -r HEX_ID
+    # Check if user input the BusID
     VALID_HEX_ID=$(echo "${HEX_ID}" | grep -Ec '^[a-z0-9]+:[a-z0-9]+\.[a-z0-9]$')
     if [ "${VALID_HEX_ID}" -ne 1 ]; then
-      echo "You have typed in an unvalid BusID."
-      echo "Example of valid entry: 00:02.0"
-      exit 1
+      # Check if user input line number
+      VALID_LINE_NUM=$(echo "${HEX_ID}" | grep -Ec '^[0-9]$')
+      LENGHT=${#LSPCI_HEX_IDS[@]}
+      if [ "${VALID_LINE_NUM}" -ne 1 ]; then
+        # Neither BusID nor Line number was inputed, exiting
+        echo "You have typed in an unvalid BusID or line number."
+        echo "Example of valid entry: 00:02.0 or 1"
+        exit 1
+      else
+        LINE_NR_TO_HEX=$(echo ${LSPCI_HEX_IDS[${HEX_ID}]})
+        VALID_HEX_ID=$(echo ${LINE_NR_TO_HEX} | grep -Ec '^[a-z0-9]+:[a-z0-9]+\.[a-z0-9]$')
+        if [ "${VALID_HEX_ID}" -ne 1 ]; then
+          echo "Script did not parse lscpi right"
+          echo "Retry and type in a BusID"
+          echo "Example of valid entry: 00:02.0"
+          exit 1
+        else
+          # BusID found by line number, use it
+          HEX_ID=${LINE_NR_TO_HEX}
+        fi
+      fi
     fi
+    IFS=$' '  # Switch back to whitespaces dividing
     for HEX_VALUE in $(echo "${HEX_ID}" | tr ':|\.' ' '); do
       HEX_VALUE_UPPER=$(echo "${HEX_VALUE}" | tr '[:lower:]' '[:upper:]')
-      DEC_VALUE=$(echo "ibase=16; ${HEX_VALUE_UPPER}" | bc)
+      DEC_VALUE=$(echo "ibase=16; ((${HEX_VALUE_UPPER}))" | bc)
       DEC_ID="${DEC_ID}:${DEC_VALUE}"
     done
     DEC_ID=$(echo "${DEC_ID}" | sed 's/^:/PCI:/')
@@ -269,7 +305,7 @@ case $1 in
       exit 1
     fi
     sed -E -i "s/Driver.*$/Driver     \"${DRIVER}\"/" "${EGPU_TEMPLATE}"
-    echo "Setup complete!"
+    echo "Setup complete! EGPU set to BusID: ${HEX_ID}"
     exit 0
   ;;
   *)
